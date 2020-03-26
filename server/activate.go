@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/mattermost/mattermost-server/model"
+	"github.com/mattermost/mattermost-server/v5/model"
 	"io/ioutil"
 	"path/filepath"
 )
@@ -9,8 +9,11 @@ import (
 const minimumServerVersion = "5.10.0"
 const botName = "rssfeedbot"
 const botDisplayName = "RSSFeed Plugin"
-const RSSFEED_ICON_URL = "https://mattermost.gridprotectionalliance.org/plugins/rssfeed/images/rss.png"
 
+// RssFeedIconURL ...
+const RssFeedIconURL = "https://mattermost.gridprotectionalliance.org/plugins/rssfeed/images/rss.png"
+
+// OnActivate ...
 func (p *RSSFeedPlugin) OnActivate() error {
 	_, err := p.ensureBotExists()
 	if err != nil {
@@ -25,6 +28,7 @@ func (p *RSSFeedPlugin) OnActivate() error {
 	return nil
 }
 
+// OnDeactivate ...
 func (p *RSSFeedPlugin) OnDeactivate() error {
 
 	p.processHeartBeatFlag = false

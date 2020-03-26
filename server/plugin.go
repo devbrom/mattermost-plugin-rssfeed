@@ -3,13 +3,16 @@ package main
 import (
 	"errors"
 	"github.com/lunny/html2md"
-	"github.com/mattermost/mattermost-server/model"
-	"github.com/mattermost/mattermost-server/plugin"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/plugin"
 	"github.com/wbernest/atom-parser"
 	"github.com/wbernest/rss-v2-parser"
 	"io/ioutil"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -138,13 +141,58 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 	}
 
 	items := rssv2parser.CompareItemsBetweenOldAndNew(oldRssFeed, newRssFeed)
+	fieldsRegexp := regexp.MustCompile(`(?m:^\*\*(.+)\*\*:\s?(.+)$)`)
+	spacesRegexp := regexp.MustCompile(`\s+`)
 
 	for _, item := range items {
-		post := newRssFeed.Channel.Title + "\n" + item.Title + "\n" + item.Link + "\n"
-		if config.ShowDescription {
-			post = post + html2md.Convert(item.Description) + "\n"
+		attachment := &model.SlackAttachment{
+			Title:     item.Title,
+			TitleLink: item.Link,
 		}
-		p.createBotPost(subscription.ChannelID, post, "custom_git_pr")
+
+		if item.Description != "" && config.ShowDescription {
+			body := item.Description
+			body = html2md.Convert(body)
+
+			titleLink, err := url.Parse(attachment.TitleLink)
+			if err == nil {
+				parts := strings.Split(titleLink.Hostname(), ".")
+				domain := parts[len(parts)-2] + "." + parts[len(parts)-1]
+
+				if domain == "upwork.com" {
+					var fields = map[string]string{
+						"Skills":   "",
+						"Category": "",
+						"Country":  "",
+						"Budget":   "",
+					}
+					fieldsMatchResult := fieldsRegexp.FindAllStringSubmatch(body, -1)
+					for _, fieldMatch := range fieldsMatchResult {
+						body = strings.Replace(body, fieldMatch[0], "", -1)
+						fields[fieldMatch[1]] = fieldMatch[2]
+					}
+
+					if fields["Budget"] == "" {
+						fields["Budget"] = "Hourly"
+					} else {
+						fields["Budget"] = fields["Budget"] + " Fixed-price"
+					}
+
+					fields["Skills"] = spacesRegexp.ReplaceAllString(fields["Skills"], " ")
+
+					for _, title := range []string{"Skills", "Category", "Country", "Budget"} {
+						attachment.Fields = append(attachment.Fields, &model.SlackAttachmentField{
+							Title: title,
+							Value: fields[title],
+							Short: true,
+						})
+					}
+				}
+			}
+
+			attachment.Text = strings.TrimSpace(body)
+		}
+		p.createBotPost(subscription.ChannelID, attachment, "custom_git_pr")
 	}
 
 	if len(items) > 0 {
@@ -156,6 +204,8 @@ func (p *RSSFeedPlugin) processRSSV2Subscription(subscription *Subscription) err
 }
 
 func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) error {
+	config := p.getConfiguration()
+
 	// get new rss feed string from url
 	newFeed, newFeedString, err := atomparser.ParseURL(subscription.URL)
 	if err != nil {
@@ -169,28 +219,79 @@ func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) erro
 	}
 
 	items := atomparser.CompareItemsBetweenOldAndNew(oldFeed, newFeed)
+	fieldsRegexp := regexp.MustCompile(`(?m:^\*\*(.+)\*\*:\s?(.+)$)`)
+	spacesRegexp := regexp.MustCompile(`\s+`)
 
 	for _, item := range items {
-		post := newFeed.Title + "\n" + item.Title + "\n"
+
+		attachment := &model.SlackAttachment{}
+		attachment.Title = item.Title
+
+		if item.Author != nil {
+			attachment.AuthorName = item.Author.Name
+			attachment.AuthorLink = item.Author.URI
+		}
 
 		for _, link := range item.Link {
 			if link.Rel == "alternate" {
-				post = post + link.Href + "\n"
+				attachment.TitleLink = link.Href
 			}
 		}
-		if item.Content != nil {
-			if item.Content.Type != "text" {
-				post = post + html2md.Convert(item.Content.Body) + "\n"
-			} else {
-				post = post + item.Content.Body + "\n"
-			}
+
+		//currently not supported
+		if item.Published != "" {
+			attachment.Timestamp = string(item.Published)
 		} else {
-			p.API.LogInfo("Missing content in atom feed item",
-				"subscription_url", subscription.URL,
-				"item_title", item.Title)
-			post = post + "\n"
+			attachment.Timestamp = string(item.Updated)
 		}
-		p.createBotPost(subscription.ChannelID, post, "custom_git_pr")
+
+		if item.Content != nil && config.ShowDescription {
+			body := item.Content.Body
+			if item.Content.Type != "text" {
+				body = html2md.Convert(body)
+			}
+
+			titleLink, err := url.Parse(attachment.TitleLink)
+			if err == nil {
+				parts := strings.Split(titleLink.Hostname(), ".")
+				domain := parts[len(parts)-2] + "." + parts[len(parts)-1]
+
+				if domain == "upwork.com" {
+					var fields = map[string]string{
+						"Skills":   "",
+						"Category": "",
+						"Country":  "",
+						"Budget":   "",
+					}
+					fieldsMatchResult := fieldsRegexp.FindAllStringSubmatch(body, -1)
+					for _, fieldMatch := range fieldsMatchResult {
+						body = strings.Replace(body, fieldMatch[0], "", -1)
+						fields[fieldMatch[1]] = fieldMatch[2]
+					}
+
+					if fields["Budget"] == "" {
+						fields["Budget"] = "Hourly"
+					} else {
+						fields["Budget"] = fields["Budget"] + " Fixed-price"
+					}
+
+					fields["Skills"] = spacesRegexp.ReplaceAllString(fields["Skills"], " ")
+
+					for _, title := range []string{"Skills", "Category", "Country", "Budget"} {
+						attachment.Fields = append(attachment.Fields, &model.SlackAttachmentField{
+							Title: title,
+							Value: fields[title],
+							Short: true,
+						})
+					}
+				}
+			}
+
+			attachment.Text = strings.TrimSpace(body)
+
+		}
+
+		p.createBotPost(subscription.ChannelID, attachment, "custom_git_pr")
 	}
 
 	if len(items) > 0 {
@@ -201,17 +302,18 @@ func (p *RSSFeedPlugin) processAtomSubscription(subscription *Subscription) erro
 	return nil
 }
 
-func (p *RSSFeedPlugin) createBotPost(channelID string, message string, postType string) error {
+func (p *RSSFeedPlugin) createBotPost(channelID string, attachment *model.SlackAttachment, postType string) error {
+	attachments := []*model.SlackAttachment{
+		attachment,
+	}
+
 	post := &model.Post{
 		UserId:    p.botUserID,
 		ChannelId: channelID,
-		Message:   message,
+		Message:   "",
 		Type:      postType,
-		/*Props: map[string]interface{}{
-			"from_webhook":      "true",
-			"override_username": botDisplayName,
-		},*/
 	}
+	post.AddProp("attachments", attachments)
 
 	if _, err := p.API.CreatePost(post); err != nil {
 		p.API.LogError(err.Error())

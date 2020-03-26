@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/mattermost/mattermost-server/mlog"
-	"github.com/mattermost/mattermost-server/model"
-	"github.com/mattermost/mattermost-server/plugin"
+	"github.com/mattermost/mattermost-server/v5/mlog"
+	"github.com/mattermost/mattermost-server/v5/model"
+	"github.com/mattermost/mattermost-server/v5/plugin"
 	"strings"
 )
 
-// COMMAND_HELP is the text you see when you type /feed help
-const COMMAND_HELP = `* |/feed subscribe url| - Connect your Mattermost channel to an rss feed 
+// CommandHelp is the text you see when you type /feed help
+const CommandHelp = `* |/feed subscribe url| - Connect your Mattermost channel to an rss feed 
  * |/feed list| - Lists the rss feeds you have subscribed to
  * |/feed unsubscribe url| - Unsubscribes the Mattermost channel from the rss feed`
 
@@ -32,7 +32,7 @@ func getCommandResponse(responseType, text string) *model.CommandResponse {
 		ResponseType: responseType,
 		Text:         text,
 		Username:     botDisplayName,
-		IconURL:      RSSFEED_ICON_URL,
+		IconURL:      RssFeedIconURL,
 		Type:         model.POST_DEFAULT,
 	}
 }
@@ -100,10 +100,10 @@ func (p *RSSFeedPlugin) ExecuteCommand(c *plugin.Context, args *model.CommandArg
 
 		return getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, fmt.Sprintf("Succesfully unsubscribed from %s.", url)), nil
 	case "help":
-		text := "###### Mattermost RSSFeed Plugin - Slash Command Help\n" + strings.Replace(COMMAND_HELP, "|", "`", -1)
+		text := "###### Mattermost RSSFeed Plugin - Slash Command Help\n" + strings.Replace(CommandHelp, "|", "`", -1)
 		return getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
 	default:
-		text := "###### Mattermost RSSFeed Plugin - Slash Command Help\n" + strings.Replace(COMMAND_HELP, "|", "`", -1)
+		text := "###### Mattermost RSSFeed Plugin - Slash Command Help\n" + strings.Replace(CommandHelp, "|", "`", -1)
 		return getCommandResponse(model.COMMAND_RESPONSE_TYPE_EPHEMERAL, text), nil
 	}
 }

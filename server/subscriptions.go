@@ -14,7 +14,8 @@ type Subscription struct {
 	XML       string
 }
 
-const SUBSCRIPTIONS_KEY = "subscriptions"
+// SubscriptionsKey ...
+const SubscriptionsKey = "subscriptions"
 
 // Subscriptions map to key value pairs
 type Subscriptions struct {
@@ -63,7 +64,7 @@ func (p *RSSFeedPlugin) addSubscription(key string, sub *Subscription) error {
 func (p *RSSFeedPlugin) getSubscriptions() (*Subscriptions, error) {
 	var subscriptions *Subscriptions
 
-	value, err := p.API.KVGet(SUBSCRIPTIONS_KEY)
+	value, err := p.API.KVGet(SubscriptionsKey)
 	if err != nil {
 		p.API.LogError(err.Error())
 		return nil, err
@@ -85,7 +86,7 @@ func (p *RSSFeedPlugin) storeSubscriptions(s *Subscriptions) error {
 		return err
 	}
 
-	p.API.KVSet(SUBSCRIPTIONS_KEY, b)
+	p.API.KVSet(SubscriptionsKey, b)
 	return nil
 }
 
